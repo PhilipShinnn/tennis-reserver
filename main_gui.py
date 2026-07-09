@@ -33,6 +33,11 @@ SETTINGS_FILE   = Path.home() / '.tennis_reserve_gui.json'
 APP_VERSION  = '1.0.0'
 GITHUB_REPO  = 'PhilipShinnn/tennis-reserver'
 
+# ── 폰트 선택 (설치된 귀여운 한글 폰트 우선) ─────────────────────────
+FONT_KR = 'Malgun Gothic'   # 기본값; App.__init__ 에서 갱신됨
+_FONT_CANDIDATES = ['나눔고딕', 'Nanum Gothic', 'NanumGothic',
+                    'Nanum Barun Gothic', 'Malgun Gothic']
+
 COURT_OPTIONS = ['중앙공원', '수질복원센터A', '수질복원센터B', '금남']
 COURT_NUMBERS = {
     '중앙공원':     ['6', '7', '8', '9', '10'],
@@ -750,25 +755,107 @@ class ChromeReserver:
         return False
 
 
+# ── 둥근 버튼 위젯 ───────────────────────────────────────────────
+
+class RoundedButton(tk.Canvas):
+    """캔버스 기반 둥근 모서리 버튼"""
+    def __init__(self, parent, text='', command=None,
+                 bg='#52B788', fg='white', disabled_bg='#B0BEC5',
+                 radius=18, height=46,
+                 font_spec=None, **kw):
+        pbg = parent.cget('bg') if hasattr(parent, 'cget') else '#EEF2F7'
+        super().__init__(parent, height=height, bg=pbg,
+                         highlightthickness=0, bd=0, cursor='hand2', **kw)
+        self._text = text; self._cmd = command
+        self._bg_n = bg;   self._bg_d = disabled_bg
+        self._fg = fg;     self._r = radius
+        self._font = font_spec or (FONT_KR, 12, 'bold')
+        self._state = 'normal'; self._cur_bg = bg
+        self.bind('<Configure>', lambda e: self._draw())
+        self.bind('<Button-1>',  self._click)
+        self.bind('<Enter>',     lambda e: self._hover(True))
+        self.bind('<Leave>',     lambda e: self._hover(False))
+
+    def _pts(self, w, h, r):
+        return [r,0, w-r,0, w,0, w,r, w,h-r, w,h, w-r,h, r,h, 0,h, 0,h-r, 0,r, 0,0]
+
+    def _draw(self, col=None):
+        self.delete('all')
+        w, h = self.winfo_width(), self.winfo_height()
+        if w < 4 or h < 4: return
+        c = col or self._cur_bg
+        self.create_polygon(self._pts(w, h, self._r),
+                            smooth=True, fill=c, outline=c)
+        self.create_text(w//2, h//2+1, text=self._text,
+                         fill=self._fg, font=self._font)
+
+    def _shade(self, h, f):
+        h = h.lstrip('#')
+        r,g,b = int(h[0:2],16),int(h[2:4],16),int(h[4:6],16)
+        return '#{:02x}{:02x}{:02x}'.format(int(r*f),int(g*f),int(b*f))
+
+    def _click(self, e=None):
+        if self._state == 'normal' and self._cmd:
+            self._draw(col=self._shade(self._cur_bg, 0.8))
+            self.after(120, self._draw)
+            self._cmd()
+
+    def _hover(self, on):
+        if self._state == 'normal':
+            self._draw(col=self._shade(self._cur_bg, 0.88) if on else None)
+
+    def config(self, **kw):
+        changed = False
+        if 'state' in kw:
+            self._state = kw['state']
+            self._cur_bg = self._bg_n if self._state == 'normal' else self._bg_d
+            tk.Canvas.configure(self, cursor='hand2' if self._state=='normal' else 'arrow')
+            changed = True
+        if 'bg' in kw:
+            self._bg_n = kw['bg']
+            if self._state == 'normal':
+                self._cur_bg = kw['bg']
+            changed = True
+        if 'cursor' in kw:
+            tk.Canvas.configure(self, cursor=kw['cursor'])
+        if 'text' in kw:
+            self._text = kw['text']; changed = True
+        if changed:
+            self._draw()
+
+
 # ── GUI 앱 ────────────────────────────────────────────────────────
 
 class App(tk.Tk):
-    # 색상 팔레트
-    C_BG      = '#F0F2F5'
-    C_WHITE   = '#FFFFFF'
-    C_GREEN   = '#1B5E20'
-    C_GREEN2  = '#2E7D32'
-    C_GREEN3  = '#4CAF50'
-    C_RED     = '#C62828'
-    C_RED2    = '#E53935'
-    C_TEXT    = '#212121'
-    C_SUB     = '#757575'
-    C_BORDER  = '#E0E0E0'
-    C_LOG_BG  = '#0D1117'
-    C_LOG_FG  = '#C9D1D9'
+    # 색상 팔레트 (파스텔 민트)
+    C_BG       = '#EEF2F7'
+    C_WHITE    = '#FFFFFF'
+    C_GREEN    = '#52B788'   # 헤더
+    C_GREEN2   = '#40916C'   # 버튼 / 강조
+    C_GREEN3   = '#74C69D'
+    C_RED      = '#E57373'   # 중지 버튼
+    C_RED2     = '#EF9A9A'
+    C_TEXT     = '#2C3E50'
+    C_SUB      = '#8095A8'
+    C_BORDER   = '#D5E0EC'
+    C_LOG_BG   = '#1A2033'
+    C_LOG_FG   = '#C9D1D9'
+    C_CARD_HDR = '#F0F6F3'   # 카드 헤더 배경
 
     def __init__(self):
         super().__init__()
+        # ── 폰트 자동 감지 ──
+        global FONT_KR
+        try:
+            import tkinter.font as tkfont
+            avail = tkfont.families()
+            for f in _FONT_CANDIDATES:
+                if f in avail:
+                    FONT_KR = f
+                    break
+        except Exception:
+            pass
+        self.FK = FONT_KR
         self.title(f'시설 자동예약  v{APP_VERSION}')
         self.configure(bg=self.C_BG)
         self.geometry('560x800')
@@ -786,24 +873,24 @@ class App(tk.Tk):
         # ── 헤더 ──
         hdr = tk.Frame(self, bg=self.C_GREEN)
         hdr.pack(fill='x')
-        tk.Label(hdr, text='  시설 자동예약',
+        tk.Label(hdr, text='  🎾  자동 예약',
                  bg=self.C_GREEN, fg='white',
-                 font=('Malgun Gothic', 14, 'bold'),
-                 pady=14, anchor='w').pack(side='left', padx=6)
-        self.status_lbl = tk.Label(hdr, text='대기 중',
-                                   bg=self.C_GREEN, fg='#A5D6A7',
-                                   font=('Malgun Gothic', 9))
-        self.status_lbl.pack(side='right', padx=14)
+                 font=(self.FK, 15, 'bold'),
+                 pady=18, anchor='w').pack(side='left', padx=8)
+        self.status_lbl = tk.Label(hdr, text='💤 대기 중',
+                                   bg=self.C_GREEN, fg='#D8F3DC',
+                                   font=(self.FK, 9))
+        self.status_lbl.pack(side='right', padx=16)
 
         # ── 로그인 ──
-        login_card = self._make_card('로그인 정보', pady_top=12)
+        login_card = self._make_card('로그인 정보', emoji='🔐', pady_top=14)
         self.id_var = tk.StringVar()
         self.pw_var = tk.StringVar()
         self._field_row(login_card, '아이디',   self.id_var)
         self._field_row(login_card, '비밀번호', self.pw_var, show='●')
 
         # ── 예약 설정 ──
-        cfg_card = self._make_card('예약 설정')
+        cfg_card = self._make_card('예약 설정', emoji='⚙️')
 
         # 코트
         row = self._label_row(cfg_card, '코트 선택')
@@ -816,14 +903,14 @@ class App(tk.Tk):
         row2 = self._label_row(cfg_card, '사전 예약일')
         self.days_var = tk.StringVar(value='20')
         tk.Spinbox(row2, from_=1, to=90, textvariable=self.days_var,
-                   width=3, font=('Malgun Gothic', 9)).pack(side='left')
+                   width=3, font=(self.FK, 9)).pack(side='left')
         tk.Label(row2, text=' 일   (세종시민 20 / 일반 7)',
                  bg=self.C_WHITE, fg=self.C_SUB,
-                 font=('Malgun Gothic', 9)).pack(side='left')
+                 font=(self.FK, 9)).pack(side='left')
 
         # 시간대 체크박스
         tk.Label(cfg_card, text='선호 시간대', bg=self.C_WHITE, fg=self.C_TEXT,
-                 font=('Malgun Gothic', 10), anchor='w').pack(fill='x', pady=(8, 2))
+                 font=(self.FK, 10), anchor='w').pack(fill='x', pady=(8, 2))
         time_grid = tk.Frame(cfg_card, bg=self.C_WHITE)
         time_grid.pack(fill='x', pady=(0, 4))
         self.time_vars = []
@@ -832,7 +919,7 @@ class App(tk.Tk):
             self.time_vars.append((code, var))
             cb = tk.Checkbutton(time_grid, text=label, variable=var,
                                 bg=self.C_WHITE, fg=self.C_TEXT,
-                                font=('Malgun Gothic', 9), selectcolor=self.C_WHITE,
+                                font=(self.FK, 9), selectcolor=self.C_WHITE,
                                 activebackground=self.C_WHITE,
                                 highlightthickness=0, bd=0)
             cb.grid(row=i // 4, column=i % 4, sticky='w', padx=2, pady=1)
@@ -842,18 +929,18 @@ class App(tk.Tk):
         self.hour_var = tk.StringVar(value='9')
         self.min_var  = tk.StringVar(value='0')
         tk.Spinbox(row3, from_=0, to=23, textvariable=self.hour_var,
-                   width=3, font=('Malgun Gothic', 9)).pack(side='left')
+                   width=3, font=(self.FK, 9)).pack(side='left')
         tk.Label(row3, text='시 ', bg=self.C_WHITE, fg=self.C_SUB,
-                 font=('Malgun Gothic', 9)).pack(side='left')
+                 font=(self.FK, 9)).pack(side='left')
         tk.Spinbox(row3, from_=0, to=59, textvariable=self.min_var,
-                   width=3, font=('Malgun Gothic', 9)).pack(side='left')
+                   width=3, font=(self.FK, 9)).pack(side='left')
         tk.Label(row3, text='분    딜레이 ', bg=self.C_WHITE, fg=self.C_SUB,
-                 font=('Malgun Gothic', 9)).pack(side='left')
+                 font=(self.FK, 9)).pack(side='left')
         self.delay_var = tk.StringVar(value='120')
         tk.Spinbox(row3, from_=50, to=500, textvariable=self.delay_var,
-                   width=4, font=('Malgun Gothic', 9)).pack(side='left')
+                   width=4, font=(self.FK, 9)).pack(side='left')
         tk.Label(row3, text=' ms', bg=self.C_WHITE, fg=self.C_SUB,
-                 font=('Malgun Gothic', 9)).pack(side='left')
+                 font=(self.FK, 9)).pack(side='left')
 
         # 테스트 모드
         test_row = tk.Frame(cfg_card, bg=self.C_WHITE)
@@ -862,7 +949,7 @@ class App(tk.Tk):
         tk.Checkbutton(test_row, text='테스트 모드 (결제창 직전까지만)',
                        variable=self.test_var,
                        bg=self.C_WHITE, fg='#E65100',
-                       font=('Malgun Gothic', 9, 'bold'),
+                       font=(self.FK, 9, 'bold'),
                        selectcolor=self.C_WHITE,
                        activebackground=self.C_WHITE,
                        highlightthickness=0, bd=0).pack(side='left')
@@ -871,33 +958,31 @@ class App(tk.Tk):
         btn_frame = tk.Frame(self, bg=self.C_BG)
         btn_frame.pack(fill='x', padx=16, pady=12)
 
-        self.start_btn = tk.Button(
-            btn_frame, text='실행 시작',
-            bg=self.C_GREEN2, fg='white',
-            font=('Malgun Gothic', 12, 'bold'),
-            relief='flat', bd=0, cursor='hand2',
-            padx=0, pady=10, command=self._start)
+        self.start_btn = RoundedButton(
+            btn_frame, text='▶  실행 시작', command=self._start,
+            bg=self.C_GREEN2, fg='white', radius=18, height=48,
+            font_spec=(FONT_KR, 12, 'bold'))
         self.start_btn.pack(side='left', fill='x', expand=True, padx=(0, 8))
 
-        self.stop_btn = tk.Button(
-            btn_frame, text='  중지  ',
-            bg='#BDBDBD', fg='white',
-            font=('Malgun Gothic', 12, 'bold'),
-            relief='flat', bd=0, state='disabled',
-            padx=12, pady=10, command=self._stop)
+        self.stop_btn = RoundedButton(
+            btn_frame, text='■  중지', command=self._stop,
+            bg='#B0BEC5', fg='white', disabled_bg='#B0BEC5',
+            radius=18, height=48, width=100,
+            font_spec=(FONT_KR, 12, 'bold'))
+        self.stop_btn.config(state='disabled')
         self.stop_btn.pack(side='right')
 
         # ── 로그 ──
         log_wrap = tk.Frame(self, bg=self.C_BG)
-        log_wrap.pack(fill='both', expand=True, padx=16, pady=(0, 12))
+        log_wrap.pack(fill='both', expand=True, padx=16, pady=(0, 14))
 
         log_hdr = tk.Frame(log_wrap, bg=self.C_BG)
         log_hdr.pack(fill='x')
-        tk.Label(log_hdr, text='실행 로그', bg=self.C_BG, fg=self.C_SUB,
-                 font=('Malgun Gothic', 9), anchor='w').pack(side='left')
+        tk.Label(log_hdr, text='📋  실행 로그', bg=self.C_BG, fg=self.C_SUB,
+                 font=(self.FK, 9), anchor='w').pack(side='left')
         self.copy_btn = tk.Button(log_hdr, text='로그 복사',
                                    bg=self.C_BG, fg=self.C_SUB,
-                                   font=('Malgun Gothic', 8),
+                                   font=(self.FK, 8),
                                    relief='flat', bd=0, cursor='hand2',
                                    command=self._copy_log)
         self.copy_btn.pack(side='right')
@@ -930,39 +1015,46 @@ class App(tk.Tk):
         self.log_text.tag_configure('ts',        foreground='#8B949E')
 
     # ── 헬퍼 위젯 ────────────────────────────────────────────────
-    def _make_card(self, title, pady_top=6):
+    def _make_card(self, title, emoji='', pady_top=6):
         outer = tk.Frame(self, bg=self.C_BG)
         outer.pack(fill='x', padx=16, pady=(pady_top, 0))
         card = tk.Frame(outer, bg=self.C_WHITE,
                         highlightbackground=self.C_BORDER,
                         highlightthickness=1, bd=0)
         card.pack(fill='x')
-        tk.Label(card, text=title, bg=self.C_WHITE, fg=self.C_GREEN2,
-                 font=('Malgun Gothic', 10, 'bold'), anchor='w',
-                 padx=14, pady=8).pack(fill='x')
-        sep = tk.Frame(card, bg=self.C_BORDER, height=1)
-        sep.pack(fill='x')
+        # 카드 헤더 (민트 배경)
+        card_hdr = tk.Frame(card, bg=self.C_CARD_HDR)
+        card_hdr.pack(fill='x')
+        prefix = f'{emoji}  ' if emoji else ''
+        tk.Label(card_hdr, text=f'  {prefix}{title}',
+                 bg=self.C_CARD_HDR, fg=self.C_GREEN2,
+                 font=(self.FK, 10, 'bold'), anchor='w',
+                 pady=10).pack(fill='x')
+        tk.Frame(card, bg=self.C_BORDER, height=1).pack(fill='x')
         inner = tk.Frame(card, bg=self.C_WHITE)
-        inner.pack(fill='x', padx=14, pady=10)
+        inner.pack(fill='x', padx=16, pady=12)
         return inner
 
     def _field_row(self, parent, label, var, show=None):
         row = tk.Frame(parent, bg=self.C_WHITE)
-        row.pack(fill='x', pady=4)
-        tk.Label(row, text=label, bg=self.C_WHITE, fg=self.C_TEXT,
-                 font=('Malgun Gothic', 10), width=7, anchor='w').pack(side='left')
-        kw = dict(textvariable=var, font=('Malgun Gothic', 10), relief='solid',
-                  bd=1, highlightthickness=0)
+        row.pack(fill='x', pady=5)
+        tk.Label(row, text=label, bg=self.C_WHITE, fg=self.C_SUB,
+                 font=(self.FK, 9), width=7, anchor='w').pack(side='left')
+        kw = dict(textvariable=var, font=(self.FK, 11),
+                  relief='flat', bd=0,
+                  highlightthickness=1,
+                  highlightbackground=self.C_BORDER,
+                  highlightcolor=self.C_GREEN3)
         if show:
             kw['show'] = show
         ent = tk.Entry(row, **kw)
-        ent.pack(side='left', fill='x', expand=True, ipady=4)
+        ent.pack(side='left', fill='x', expand=True, ipady=7)
 
     def _label_row(self, parent, label):
         row = tk.Frame(parent, bg=self.C_WHITE)
         row.pack(fill='x', pady=4)
         tk.Label(row, text=label, bg=self.C_WHITE, fg=self.C_TEXT,
-                 font=('Malgun Gothic', 10), width=7, anchor='w').pack(side='left')
+                 font=(self.FK, 10), width=7, anchor='w').pack(side='left')
         return row
 
     # ── 실행 / 중지 ───────────────────────────────────────────────
@@ -1010,8 +1102,8 @@ class App(tk.Tk):
         self._running = True
         self._stop_event.clear()
         self.start_btn.config(state='disabled', bg='#78909C')
-        self.stop_btn.config(state='normal', bg=self.C_RED, cursor='hand2')
-        self._set_status('실행 중...')
+        self.stop_btn.config(state='normal', bg=self.C_RED)
+        self._set_status('🚀 실행 중...')
         self._save_settings()
 
         self._thread = threading.Thread(
@@ -1081,8 +1173,8 @@ class App(tk.Tk):
     def _on_done(self):
         self._running = False
         self.start_btn.config(state='normal', bg=self.C_GREEN2)
-        self.stop_btn.config(state='disabled', bg='#BDBDBD', cursor='arrow')
-        self._set_status('완료')
+        self.stop_btn.config(state='disabled', bg='#B0BEC5')
+        self._set_status('✅ 완료')
 
     def _copy_log(self):
         content = self.log_text.get('1.0', 'end').strip()
