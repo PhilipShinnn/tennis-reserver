@@ -1,0 +1,27 @@
+name: Windows EXE Build & Release
+on:
+  workflow_dispatch:
+    inputs:
+      version:
+        description: Version number (e.g. 1.0.1)
+        required: true
+        default: 1.0.0
+permissions:
+  contents: write
+jobs:
+  build:
+    runs-on: windows-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: '3.12'
+      - run: pip install playwright pyinstaller
+      - run: |
+          playwright install chromium
+          pyinstaller --noconsole --onefile --name TennisReserver --collect-all playwright main_gui.py
+      - uses: softprops/action-gh-release@v2
+        with:
+          tag_name: v${{ github.event.inputs.version }}
+          name: v${{ github.event.inputs.version }}
+          files: dist/TennisReserver.exe
