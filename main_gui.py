@@ -904,7 +904,7 @@ class App(tk.Tk):
         self.days_var = tk.StringVar(value='20')
         tk.Spinbox(row2, from_=1, to=90, textvariable=self.days_var,
                    width=3, font=(self.FK, 9)).pack(side='left')
-        tk.Label(row2, text=' 일   (세종시민 20 / 일반 7)',
+        tk.Label(row2, text=' 일  (시민20/일반7)',
                  bg=self.C_WHITE, fg=self.C_SUB,
                  font=(self.FK, 9)).pack(side='left')
 
